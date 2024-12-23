@@ -1,17 +1,15 @@
 import pyodbc
-import json
+from datetime import datetime
+
+
 def create_connection():
     return pyodbc.connect(
         'DRIVER={SQL Server};'
         'SERVER=DESKTOP-P46QK96\MSSQLSERVER01;'
         'DATABASE=instgram_db;'
-        'Trusted_Connection=yes;'  # Windows Authentication
-        # For SQL Server Authentication, use these instead:
-        # 'UID=your_username;'
-        # 'PWD=your_password;'
+        'Trusted_Connection=yes;'
     )
 
-#only for testing connect ion
 def test_connection():
     try:
         # Try to create a connection
@@ -37,72 +35,161 @@ def test_connection():
         print("Connection failed!")
         print("Error:", str(e))
         return False
+test_connection()
+class User:
+    @staticmethod
+    def create_user(fname, lname, profile_name, email, password, bio="", account_type="regular"):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO [user] (fname, lname, profile_name, email, password, bio, account_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (fname, lname, profile_name, email, password, bio, account_type))
+            conn.commit()
+            return cursor.rowcount > 0
 
-# Function to create a new user with additional fields
-def create_user(fname, lname, profile_name, email, password, bio, account_type):
-    conn = create_connection()
-    cursor = conn.cursor()
-    query = """
-    INSERT INTO user (fname, lname, profile_name,email, password, bio, account_type)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """
-    cursor.execute(query, (fname, lname, profile_name, email, password, bio, account_type))
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-# Function to authenticate a user
-def authenticate_user(email, password):
-    conn = create_connection()
-    cursor = conn.cursor()
-    query = """
-    SELECT * FROM user WHERE email = %s AND password = %s
-    """
-    cursor.execute(query, (email, password))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    return user
-
-# Function to get user details by email
-def get_user_by_email(email):
-    conn = create_connection()
-    cursor = conn.cursor()
-    query = """
-    SELECT * FROM user WHERE email = %s
-    """
-    cursor.execute(query, (email,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return json.dumps(user)
+    @staticmethod
+    def create_business_account(user_id, business_name, category, website=None, contact_email=None, contact_phone=None):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO business_account (user_id, business_name, category, website, contact_email, contact_phone)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (user_id, business_name, category, website, contact_email, contact_phone))
+            cursor.execute("UPDATE [user] SET account_type = 'business' WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
 
-# Function to update user details
-def update_user_data(email, fname, profile_pic_path ,lname, profile_name, bio, account_type):
-    conn = create_connection()
-    cursor = conn.cursor()
-    query = """
-    UPDATE user SET fname = %s, profile_pic_path = %s, lname = %s, profile_name = %s, bio = %s, account_type = %s WHERE email = %s WHERE account_type = %s
-    """
-    cursor.execute(query, (fname, profile_pic_path ,lname, profile_name, bio, account_type, email))
-    conn.commit()
-    cursor.close()
-    conn.close()
+class Post:
+    @staticmethod
+    def create_post(user_id, caption, location, post_type, media_files, filters=None, coordinates=None, product_tags=None):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    INSERT INTO post (created_by_user_id, caption, location, post_type)
+                    OUTPUT INSERTED.post_id
+                    VALUES (?, ?, ?, ?)
+                """, (user_id, caption, location, post_type))
+                post_id = cursor.fetchone()[0]
 
-# def switch_to_business(email):
-#     conn = create_connection()
-#     cursor = conn.cursor()
-#     query = """
-#     SELECT * FROM user WHERE email = %s
-#     """
-#     cursor.execute(query, (email,))
+                for idx, media_file in enumerate(media_files):
+                    filter_id = filters[idx] if filters and idx < len(filters) else None
+                    long, lat = coordinates if coordinates else (None, None)
+                    cursor.execute("""
+                        INSERT INTO post_media (post_id, filter_id, media_file, longtude, latitude)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (post_id, filter_id, media_file, long, lat))
 
-def create_post(user_id):
-    conn = create_connection()
-    cursor = conn.cursor()
-    query = """
-    INSERT INTO post (user_id, post)
-    VALUES (%s, %s)
-    """
+                if product_tags:
+                    for product_id in product_tags:
+                        cursor.execute("""
+                            INSERT INTO post_product_tag (post_id, product_id)
+                            VALUES (?, ?)
+                        """, (post_id, product_id))
+
+                conn.commit()
+                return post_id
+            except Exception as e:
+                conn.rollback()
+                raise e
+
+
+class Social:
+    @staticmethod
+    def follow_user(follower_id, followed_id):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO follower (following_user_id, followed_user_id, status)
+                VALUES (?, ?, 'active')
+            """, (follower_id, followed_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def react_to_post(user_id, post_id):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO reaction (user_id, post_id)
+                VALUES (?, ?)
+            """, (user_id, post_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def comment_on_post(user_id, post_id, comment_text, reply_to_id=None):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO comment (created_by_user_id, post_id, comment, comment_replied_to_id)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, post_id, comment_text, reply_to_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+
+class Business:
+    @staticmethod
+    def create_product(business_id, name, price, description, stock):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO product (business_id, product_name, price, description, available_stock)
+                VALUES (?, ?, ?, ?, ?)
+            """, (business_id, name, price, description, stock))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def create_advertisement(user_id, post_id, product_id, target_audience, start_date, end_date):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO advertisement (created_by_user_id, post_id, product_id, 
+                                        target_audience, start_date, end_date)
+                OUTPUT INSERTED.ad_id
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (user_id, post_id, product_id, target_audience, start_date, end_date))
+            ad_id = cursor.fetchone()[0]
+
+            cursor.execute("""
+                INSERT INTO ad_insight (ad_id)
+                VALUES (?)
+            """, (ad_id,))
+            conn.commit()
+            return ad_id
+
+
+class Chat:
+    @staticmethod
+    def create_chat(chat_name=None):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO chats (chat_name)
+                OUTPUT INSERTED.chat_id
+                VALUES (?)
+            """, (chat_name,))
+            return cursor.fetchone()[0]
+
+    @staticmethod
+    def send_message(sender_id, receiver_id, content, attachment_path=None):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO message (sender_id, receiver_id, content)
+                OUTPUT INSERTED.message_id
+                VALUES (?, ?, ?)
+            """, (sender_id, receiver_id, content))
+            message_id = cursor.fetchone()[0]
+
+            if attachment_path:
+                cursor.execute("""
+                    INSERT INTO attachment (message_id, file_path)
+                    VALUES (?, ?)
+                """, (message_id, attachment_path))
+            conn.commit()
+            return message_id
