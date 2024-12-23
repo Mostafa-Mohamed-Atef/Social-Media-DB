@@ -1,5 +1,5 @@
 import pyodbc
-
+import json
 def create_connection():
     return pyodbc.connect(
         'DRIVER={SQL Server};'
@@ -62,6 +62,7 @@ def authenticate_user(email, password):
     user = cursor.fetchone()
     cursor.close()
     conn.close()
+
     return user
 
 # Function to get user details by email
@@ -75,7 +76,7 @@ def get_user_by_email(email):
     user = cursor.fetchone()
     cursor.close()
     conn.close()
-    return user
+    return json.dumps(user)
 
 
 # Function to update user details
@@ -83,9 +84,25 @@ def update_user_data(email, fname, profile_pic_path ,lname, profile_name, bio, a
     conn = create_connection()
     cursor = conn.cursor()
     query = """
-    UPDATE user SET fname = %s, profile_pic_path = %s, lname = %s, profile_name = %s, bio = %s, account_type = %s WHERE email = %s
+    UPDATE user SET fname = %s, profile_pic_path = %s, lname = %s, profile_name = %s, bio = %s, account_type = %s WHERE email = %s WHERE account_type = %s
     """
     cursor.execute(query, (fname, profile_pic_path ,lname, profile_name, bio, account_type, email))
     conn.commit()
     cursor.close()
     conn.close()
+
+# def switch_to_business(email):
+#     conn = create_connection()
+#     cursor = conn.cursor()
+#     query = """
+#     SELECT * FROM user WHERE email = %s
+#     """
+#     cursor.execute(query, (email,))
+
+def create_post(user_id):
+    conn = create_connection()
+    cursor = conn.cursor()
+    query = """
+    INSERT INTO post (user_id, post)
+    VALUES (%s, %s)
+    """
