@@ -11,7 +11,7 @@ def create_connection():
         # 'PWD=your_password;'
     )
 
-#only for testing connection
+#only for testing connect ion
 def test_connection():
     try:
         # Try to create a connection
