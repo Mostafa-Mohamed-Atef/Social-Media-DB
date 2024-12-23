@@ -23,8 +23,8 @@ def test_connection():
         print("SQL Server version:", db_version[0])
 
         # Test if we can access our database
-        cursor.execute("SELECT COUNT(*) FROM [user]")
-        user_count = cursor.fetchone()[0]
+        cursor.execute("SELECT * FROM [user]")
+        user_count = cursor.fetchall()
         print(f"Number of users in database: {user_count}")
 
         cursor.close()
@@ -91,6 +91,56 @@ class Post:
 
                 conn.commit()
                 return post_id
+            except Exception as e:
+                conn.rollback()
+                raise e
+    @staticmethod
+    def get_all_posts():
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    SELECT * FROM post
+                    """)
+                return cursor.fetchall()
+            except Exception as e:
+                raise e
+
+    @staticmethod
+    def get_personal_posts(user_id):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                SELECT p.*, pm.media_file 
+                FROM post p
+                LEFT JOIN post_media pm ON p.post_id = pm.post_id
+                WHERE p.created_by_user_id = ?
+                """, (user_id,))
+                return cursor.fetchall()
+            except Exception as e:
+                raise e
+
+    @staticmethod
+    def edited_post(post_id, caption, location, post_type, media_files):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                UPDATE [post] WHERE SET caption = ?, location = ?, post_type = ?, media_files = ? WHERE post_id=?""", (caption, location, post_type, media_files, post_id))
+                cursor.commit()
+            except Exception as e:
+                raise e
+
+    @staticmethod
+    def delete_post(post_id):
+        with create_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                DELETE FROM post WHERE post_id=?""", (post_id,))
+                conn.commit()
             except Exception as e:
                 conn.rollback()
                 raise e

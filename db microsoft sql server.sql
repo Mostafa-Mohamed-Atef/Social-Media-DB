@@ -63,6 +63,10 @@ CREATE TABLE post_type (
     post_type_name VARCHAR(50)
 );
 
+insert into post_type(post_type_name)
+values ('story'), ('post'), ('reel')
+
+
 CREATE TABLE post (
     post_id INT IDENTITY(1,1) PRIMARY KEY,
     created_by_user_id INT FOREIGN KEY REFERENCES [user](user_id),
